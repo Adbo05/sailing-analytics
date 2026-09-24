@@ -58,6 +58,7 @@ import com.sap.sailing.domain.common.CompetitorRegistrationType;
 import com.sap.sailing.domain.common.DataImportProgress;
 import com.sap.sailing.domain.common.DataImportSubProgress;
 import com.sap.sailing.domain.common.DetailType;
+import com.sap.sailing.domain.common.MasterDataImportObjectCreationCount;
 import com.sap.sailing.domain.common.NoWindException;
 import com.sap.sailing.domain.common.RaceFetcher;
 import com.sap.sailing.domain.common.RegattaAndRaceIdentifier;
@@ -84,8 +85,8 @@ import com.sap.sailing.domain.leaderboard.RegattaLeaderboardWithEliminations;
 import com.sap.sailing.domain.leaderboard.RegattaLeaderboardWithOtherTieBreakingLeaderboard;
 import com.sap.sailing.domain.leaderboard.ScoringScheme;
 import com.sap.sailing.domain.leaderboard.impl.DelegatingRegattaLeaderboardWithCompetitorElimination;
-import com.sap.sailing.domain.markpassinghash.MarkPassingRaceFingerprintRegistry;
 import com.sap.sailing.domain.maneuverhash.ManeuverRaceFingerprintRegistry;
+import com.sap.sailing.domain.markpassinghash.MarkPassingRaceFingerprintRegistry;
 import com.sap.sailing.domain.persistence.DomainObjectFactory;
 import com.sap.sailing.domain.persistence.MongoObjectFactory;
 import com.sap.sailing.domain.polars.PolarDataService;
@@ -186,7 +187,14 @@ public interface RacingEventService extends TrackedRegattaRegistry, RegattaFetch
     
     /**
      * Traverses through the event's {@link Event#getLeaderboardGroups() leaderboard groups} and from there on to the
-     * {@link Leaderboard}s and finds }
+     * {@link Leaderboard}s and finds all {@link TrackedRace}s whose tracking interval contains {@code at}.
+     * <p>
+     * A tracked race is only returned when {@code at} is at or after its {@link TrackedRace#getStartOfTracking() start
+     * of tracking} and, if an {@link TrackedRace#getEndOfTracking() end of tracking} is defined, at or before that end.
+     * Because the start of tracking is used as the lower interval bound, every {@link TrackedRace} returned is
+     * guaranteed to have a non-{@code null} {@link TrackedRace#getStartOfTracking() start of tracking}; callers may rely
+     * on this and dereference it without a null check. The {@link TrackedRace#getEndOfTracking() end of tracking} may
+     * still be {@code null} for races whose tracking has not ended yet.
      * 
      * @param at
      *            the time point that must be between a {@link TrackedRace}'s {@link TrackedRace#getStartOfTracking()
@@ -745,6 +753,17 @@ public interface RacingEventService extends TrackedRegattaRegistry, RegattaFetch
 
     DataImportProgress createOrUpdateDataImportProgressWithReplication(UUID importOperationId,
             double overallProgressPct, DataImportSubProgress subProgress, double subProgressPct);
+
+    /**
+     * Like {@link #createOrUpdateDataImportProgressWithReplication(UUID, double, DataImportSubProgress, double)} but
+     * also publishes the final {@code result} both locally and on all replicas, so that a client polling either the
+     * master or a replica sees {@link DataImportProgress#getResult()} turn non-{@code null} at the same, true point of
+     * completion (see bug6227). Use the {@code result}-less overload for the intermediate progress updates that carry
+     * no result yet.
+     */
+    DataImportProgress createOrUpdateDataImportProgressWithReplication(UUID importOperationId,
+            double overallProgressPct, DataImportSubProgress subProgress, double subProgressPct,
+            MasterDataImportObjectCreationCount result);
 
     DataImportProgress createOrUpdateDataImportProgressWithoutReplication(UUID importOperationId,
             double overallProgressPct, DataImportSubProgress subProgress, double subProgressPct);
